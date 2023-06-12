@@ -158,16 +158,15 @@ control MyIngress(inout headers hdr,
     register<bit<64>>(1024) flows;
     register<bit<112>>(1) TRESHOLDI;
 
-    action get_inter_packet_gap(out bit<48> interval,bit<32> flow_id)
+    action update_inter_packet_gap(out bit<48> pkt_count,bit<32> flow_id)
     {
       bit<48> last_pkt_cnt;
       bit<32> index;
-      /* Get the time the previous packet was seen */
+      /* Get the current count of packet in flow_id flow */
       last_seen.read(last_pkt_cnt,flow_id);
-      interval = last_pkt_cnt + 1;
-      /* Update the register with the new timestamp */
-      last_seen.write((bit<32>)flow_id,
-      interval);
+      pkt_count = last_pkt_cnt + 1;
+      /* Update the register with the incremented count */
+      last_seen.write((bit<32>)flow_id, pkt_count);
     }
     action compute_flow_id () {
       meta.ingress_metadata.my_flowID[31:0]=hdr.ipv4.srcAddr;
@@ -243,13 +242,14 @@ control MyIngress(inout headers hdr,
             compute_reg_index();
             bit<48> last_pkt_cnt;
             bit<48> last_pkt_cnt_opp;
-            /* Get the time the previous packet was seen */
             flow = meta.ingress_metadata.hashed_flow;
             flow_opp = meta.ingress_metadata.hashed_flow_opposite;
-            last_seen.read(last_pkt_cnt,flow);
+            /* Update and get packet count of flow */
+            update_inter_packet_gap(last_pkt_cnt,flow);
+            /* Get packet count of flow_opp */
             last_seen.read(last_pkt_cnt_opp,flow_opp);
-            tmp = last_pkt_cnt - last_pkt_cnt_opp + 1;
-            get_inter_packet_gap(last_pkt_cnt,flow);
+            tmp = last_pkt_cnt - last_pkt_cnt_opp;
+            /* If asymmetry hits the threshold */
             if(tmp == TRESHOLD) {
                 bit<112> pkt_data = 0x0;
                 pkt_data[31:0] = hdr.ipv4.srcAddr;
